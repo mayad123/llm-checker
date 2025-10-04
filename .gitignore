@@ -14,3 +14,19 @@ searxng/.data/
 # OS & env
 .DS_Store
 .env
+# Python
+backend/.venv/
+backend/venv/
+__pycache__/
+*.pyc
+
+# Node
+web/node_modules/
+web/.next/
+
+# Docker (if you add volumes later)
+searxng/.data/
+
+# OS & env
+.DS_Store
+.env
