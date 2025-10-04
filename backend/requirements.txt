@@ -1,0 +1,10 @@
+fastapi
+uvicorn[standard]
+spacy
+trafilatura
+httpx
+rank_bm25
+sentence-transformers
+transformers
+torch
+onnxruntime
