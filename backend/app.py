@@ -19,8 +19,9 @@ app.add_middleware(
 
 nlp = spacy.load("en_core_web_sm")
 embedder = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
-tok = AutoTokenizer.from_pretrained("microsoft/deberta-v3-base-mnli")
-nli = AutoModelForSequenceClassification.from_pretrained("microsoft/deberta-v3-base-mnli")
+MODEL_ID = "MoritzLaurer/deberta-v3-base-mnli-fever-anli"
+tok = AutoTokenizer.from_pretrained(MODEL_ID)
+nli = AutoModelForSequenceClassification.from_pretrained(MODEL_ID)
 label_map = {0: "contradicted", 1: "unclear", 2: "supported"}
 
 def extract_claims(text: str, cap: int = 8):
