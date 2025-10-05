@@ -1,15 +1,14 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 import httpx, trafilatura, spacy, time, os, traceback
 from urllib.parse import urlparse
-from functools import lru_cache
 from rank_bm25 import BM25Okapi
 from sentence_transformers import SentenceTransformer, util, CrossEncoder
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 import torch
 
 # ===== Config =====
-SEARX_URL = os.getenv("SEARX_URL", "http://localhost:8080/search")
+SEARX_URL = os.getenv("SEARX_URL", "http://127.0.0.1:8080/search")
 SEARX_TIMEOUT_S = float(os.getenv("SEARX_TIMEOUT_S", "15"))
 
 # Retrieval / ranking
@@ -18,10 +17,10 @@ RECALL_TOP_PARAS = 10        # candidates passed to the reranker
 TOP_PARAS_PER_PAGE = 3       # NLI checks per page after rerank
 
 # Decision thresholds
-SUPPORT_THRESHOLD = 0.65
-CONTRA_THRESHOLD  = 0.65
-MARGIN = 0.10                # extra edge needed if both sides are strong
-MIN_SOURCES = 1              # set 2 for stricter consensus
+SUPPORT_THRESHOLD = 0.60
+CONTRA_THRESHOLD  = 0.60
+MARGIN = 0.08
+MIN_SOURCES = 1
 
 TRUST_BONUS_DOMAINS = (
     ".wikipedia.org", ".britannica.com", ".gov", ".edu",
@@ -32,7 +31,7 @@ TRUST_BONUS_DOMAINS = (
 app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # dev-only; in prod set to ["http://localhost:3000", ...]
+    allow_origins=["*"],  # dev-only
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -64,7 +63,6 @@ def domain_weight(url: str) -> float:
 
 def decision_from_votes(votes, support_threshold=SUPPORT_THRESHOLD, contra_threshold=CONTRA_THRESHOLD,
                         min_sources=MIN_SOURCES, margin=MARGIN):
-    """Aggregate multiple evidence votes into a single verdict with consensus + margin."""
     if not votes:
         return "unclear", None
 
@@ -104,9 +102,7 @@ def decision_from_votes(votes, support_threshold=SUPPORT_THRESHOLD, contra_thres
     best = best_sup if (best_sup and (not best_con or best_sup["conf"] >= best_con["conf"])) else best_con
     return "unclear", best
 
-# ----- Claim extraction (guarantees at least one) -----
 def extract_claims(text: str, cap: int = 8):
-    """Return 'claim-like' sentences; if none, fall back to the whole input."""
     doc = nlp(text or "")
     out = []
 
@@ -121,34 +117,26 @@ def extract_claims(text: str, cap: int = 8):
     def has_num_or_date(span):
         return any(t.like_num for t in span) or any(ent.label_ in {"DATE","TIME"} for ent in span.ents)
 
-    # Pass 1: verb + (NER or numbers/dates)
     for s in doc.sents:
         if has_verb(s) and (has_salient_ner(s) or has_num_or_date(s)):
             out.append(s.text.strip())
 
-    # Pass 2: any sentence with a verb (softer)
     if not out:
         for s in doc.sents:
             st = s.text.strip()
             if has_verb(s) and len(st.split()) >= 3:
                 out.append(st)
 
-    # Fallback: whole input
     if not out:
         whole = (text or "").strip()
         if whole:
             out = [whole if len(whole) <= 500 else whole[:500]]
 
-    # Cleanup + cap
     out = [c.replace("\n", " ").strip(" .") for c in out]
-    out = list(dict.fromkeys([c for c in out if len(c.split()) >= 3]))  # dedup & keep order
+    out = list(dict.fromkeys([c for c in out if len(c.split()) >= 3]))
     return out[:cap]
 
 def decompose_claim(claim: str):
-    """
-    Split long / compound claims into sub-claims using simple clause boundaries.
-    Keeps it generic (no fact-specific rules).
-    """
     doc = nlp(claim)
     chunks, cur = [], []
     for tok in doc:
@@ -162,7 +150,6 @@ def decompose_claim(claim: str):
         s = " ".join(cur).strip(" ,;")
         if len(s.split()) >= 4:
             chunks.append(s)
-    # If decomposition produced nothing useful, return the claim as-is
     return chunks or [claim]
 
 # ===== Retrieval helpers =====
@@ -172,7 +159,9 @@ async def searx(query: str):
         async with httpx.AsyncClient(timeout=SEARX_TIMEOUT_S) as client:
             r = await client.get(SEARX_URL, params=params)
             r.raise_for_status()
-            return r.json().get("results", [])[:5]
+            results = r.json().get("results", [])[:10]
+            print(f"[searx] '{query}' -> {len(results)} results")
+            return results
     except Exception as e:
         print(f"[searx] query='{query}' error={e}")
         return []
@@ -193,24 +182,37 @@ def nli_label(claim: str, passage: str):
     idx = int(torch.argmax(probs))
     return label_map[idx], float(probs[idx])
 
-# ===== API =====
+# ===== Debug endpoint to inspect SearXNG =====
+@app.get("/debug/searx")
+async def debug_searx(q: str = Query(..., description="search query")):
+    hits = await searx(q)
+    # Only return essential fields to keep it small
+    slim = [
+        {
+            "engine": h.get("engine"),
+            "title": h.get("title"),
+            "url": h.get("url"),
+            "content": (h.get("content") or "")[:250]
+        }
+        for h in hits
+    ]
+    return {"count": len(slim), "results": slim}
+
+# ===== Main API =====
 @app.post("/check")
 async def check(payload: dict):
     t0 = time.time()
     llm_output = (payload or {}).get("llm_output", "") or ""
+    want_debug = bool((payload or {}).get("debug", False))
     claims = extract_claims(llm_output)
-    print(f"[check] text_len={len(llm_output)} claims={claims}")
 
+    print(f"[check] text_len={len(llm_output)} claims={claims}")
     results = []
+    debug_out = []  # collected only if want_debug
 
     for c in claims:
-        # Decompose long/compound claims into sub-claims
         sub_claims = decompose_claim(c)
-
-        # Light query expansion base
         q_short = c[:128]
-
-        votes_for_overall = []  # collect votes across all sub-claims (used if you want a single verdict)
 
         for subc in sub_claims:
             queries = [
@@ -222,20 +224,46 @@ async def check(payload: dict):
 
             candidates = []
             seen_urls = set()
+            debug_claim = {
+                "sub_claim": subc,
+                "queries": [],
+                "hits_by_query": [],
+                "urls_used": [],
+                "candidates": 0,
+                "notes": []
+            }
 
+            # Pass 1: general search
             for q in queries:
-                for res in await searx(q):
+                hits = await searx(q)
+                debug_claim["queries"].append(q)
+                debug_claim["hits_by_query"].append(
+                    [{"url": h.get("url"), "engine": h.get("engine")} for h in hits]
+                )
+
+                for res in hits:
                     url = res.get("url")
                     if not url or url in seen_urls:
                         continue
                     seen_urls.add(url)
 
+                    # Try full-text extraction
                     text = fetch_text(url)
-                    if not text:
+
+                    # Fallback: use SearXNG summary snippet as a tiny passage if site blocks scraping
+                    snippets = []
+                    content_snip = (res.get("content") or "").strip()
+                    if content_snip and len(content_snip.split()) >= PARA_MIN_WORDS:
+                        snippets.append(content_snip)
+
+                    if not text and not snippets:
                         continue
 
-                    # keep short, high-signal paragraphs
-                    paras_all = [p for p in text.split("\n") if len(p.split()) >= PARA_MIN_WORDS]
+                    paras_all = []
+                    if text:
+                        paras_all.extend([p for p in text.split("\n") if len(p.split()) >= PARA_MIN_WORDS])
+                    paras_all.extend(snippets)
+
                     if not paras_all:
                         continue
 
@@ -246,7 +274,13 @@ async def check(payload: dict):
                     emb_p = embedder.encode(paras_all, convert_to_tensor=True)
                     cos = util.cos_sim(emb_c, emb_p)[0].tolist()
 
-                    maxbm = max(bm) if bm and max(bm) > 0 else 1.0
+                    bm = bm = bm.tolist() if hasattr(bm, "tolist") else list(bm)
+                    if bm:  # now safe because it's a list
+                        mb = max(bm)
+                        maxbm = mb if mb > 0 else 1.0
+                    else:
+                        maxbm = 1.0
+
                     hybrid = [0.6*(s/maxbm) + 0.4*cosv for s, cosv in zip(bm, cos)]
                     top_idx = sorted(range(len(paras_all)), key=lambda i: hybrid[i], reverse=True)[:RECALL_TOP_PARAS]
                     top_paras = [paras_all[i] for i in top_idx]
@@ -256,7 +290,6 @@ async def check(payload: dict):
                     try:
                         rerank_scores = reranker.predict(pairs).tolist()
                     except Exception:
-                        # If GPU/ONNX issues, fall back to hybrid only
                         print("[reranker] fallback to hybrid")
                         rerank_scores = [hybrid[i] for i in top_idx]
 
@@ -265,7 +298,6 @@ async def check(payload: dict):
                     # NLI with a small context window (±1 paragraph)
                     for p, _score in reranked:
                         try:
-                            # Build window around the paragraph (find its index in full list)
                             try:
                                 pi = paras_all.index(p)
                             except ValueError:
@@ -274,7 +306,6 @@ async def check(payload: dict):
                                 window = " ".join(paras_all[max(0, pi-1): min(len(paras_all), pi+2)])
                             else:
                                 window = p
-                            # Trim to ~450 tokens to stay under 512 with claim tokens
                             window = " ".join(window.split()[:450])
 
                             label, conf = nli_label(subc, window)
@@ -283,26 +314,103 @@ async def check(payload: dict):
                             print(f"[nli] error on url={url}")
                             traceback.print_exc()
 
-            # Decide verdict for this sub-claim
-            sub_verdict, sub_best = decision_from_votes(
-                candidates,
-                support_threshold=SUPPORT_THRESHOLD,
-                contra_threshold=CONTRA_THRESHOLD,
-                min_sources=MIN_SOURCES,
-                margin=MARGIN
-            )
-            votes_for_overall.extend(candidates)
+                    debug_claim["urls_used"].append(url)
 
-            print(f"[check] sub-claim='{subc[:80]}' cand={len(candidates)} verdict={sub_verdict} conf={(sub_best or {}).get('conf')}")
+            # Pass 2: explicit Wikipedia fallback if nothing found
+            if not candidates:
+                wiki_queries = [f"site:wikipedia.org \"{subc}\"", f"site:wikipedia.org {subc[:128]}"]
+                for q in wiki_queries:
+                    hits = await searx(q)
+                    debug_claim["queries"].append(q)
+                    debug_claim["hits_by_query"].append(
+                        [{"url": h.get("url"), "engine": h.get("engine")} for h in hits]
+                    )
+                    for res in hits:
+                        url = res.get("url")
+                        if not url or url in seen_urls or "wikipedia.org" not in (url or ""):
+                            continue
+                        seen_urls.add(url)
+
+                        text = fetch_text(url)
+                        if not text:
+                            continue
+
+                        paras_all = [p for p in text.split("\n") if len(p.split()) >= PARA_MIN_WORDS]
+                        if not paras_all:
+                            continue
+
+                        # Stage 1: BM25 + cosine (recall)
+                        bm25 = BM25Okapi([p.split() for p in paras_all])
+                        bm = bm25.get_scores(subc.split()).tolist()  # <-- convert ndarray -> list
+
+                        emb_c = embedder.encode([subc], convert_to_tensor=True)
+                        emb_p = embedder.encode(paras_all, convert_to_tensor=True)
+                        cos = util.cos_sim(emb_c, emb_p)[0].tolist()
+
+                        # Safe max handling (avoid "truth value of an array is ambiguous")
+                        if bm:
+                            mb = max(bm)
+                            maxbm = mb if mb > 0 else 1.0
+                        else:
+                            maxbm = 1.0
+
+                        hybrid = [0.6 * (s / maxbm) + 0.4 * cosv for s, cosv in zip(bm, cos)]
+                        top_idx = sorted(range(len(paras_all)), key=lambda i: hybrid[i], reverse=True)[:RECALL_TOP_PARAS]
+                        top_paras = [paras_all[i] for i in top_idx]
+
+                        # Stage 2: cross-encoder rerank (precision)
+                        pairs = [(subc, p) for p in top_paras]
+                        try:
+                            rerank_scores = reranker.predict(pairs).tolist()
+                        except Exception:
+                            rerank_scores = [hybrid[i] for i in top_idx]  # fallback to hybrid scores
+
+                        reranked = sorted(zip(top_paras, rerank_scores), key=lambda x: x[1], reverse=True)[:TOP_PARAS_PER_PAGE]
+
+                        for p, _score in reranked:
+                            try:
+                                try:
+                                    pi = paras_all.index(p)
+                                except ValueError:
+                                    pi = None
+                                if pi is not None:
+                                    window = " ".join(paras_all[max(0, pi-1): min(len(paras_all), pi+2)])
+                                else:
+                                    window = p
+                                window = " ".join(window.split()[:450])
+
+                                label, conf = nli_label(subc, window)
+                                candidates.append({"url": url, "passage": window, "label": label, "conf": conf})
+                            except Exception:
+                                traceback.print_exc()
+                        debug_claim["urls_used"].append(url)
+
+            verdict, best = decision_from_votes(candidates)
+            debug_claim["candidates"] = len(candidates)
+            if best:
+                debug_claim["top_evidence"] = {
+                    "label": best["label"], "conf": best["conf"], "url": best["url"],
+                    "snippet": best["passage"][:240]
+                }
+            else:
+                debug_claim["top_evidence"] = None
+
+            print(f"[check] sub-claim='{subc[:80]}' cand={len(candidates)} verdict={verdict} conf={(best or {}).get('conf')}")
+            if want_debug:
+                debug_out.append(debug_claim)
+
             results.append({
                 "text": subc,
-                "verdict": sub_verdict,
-                "confidence": (sub_best or {}).get("conf", 0.0),
-                "citation": ({"url": sub_best["url"], "snippet": sub_best["passage"][:350]} if sub_best else None)
+                "verdict": verdict,
+                "confidence": (best or {}).get("conf", 0.0),
+                "citation": ({"url": best["url"], "snippet": best["passage"][:350]} if best else None)
             })
 
-    return {
+    resp = {
         "checked_on": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "claims": results,
         "latency_s": round(time.time() - t0, 2)
     }
+    if want_debug:
+        resp["debug"] = debug_out
+    return resp

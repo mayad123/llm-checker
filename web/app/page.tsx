@@ -22,7 +22,7 @@ export default function Page() {
       const res = await fetch("/api/check", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ llm_output: input }),
+        body: JSON.stringify({ llm_output: input, debug: true }),
       });      
       const data = await res.json();
       setCheckedOn(data.checked_on);
