@@ -30,3 +30,6 @@ searxng/.data/
 # OS & env
 .DS_Store
 .env
+
+# Experiment artifacts
+wandb/
