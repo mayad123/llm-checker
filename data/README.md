@@ -33,8 +33,12 @@ Loading in backend
   - `load_reranker_pairs(path)` returns list of dicts.
   - `to_crossencoder_inputs(pairs)` returns `(texts, labels)` ready for a CrossEncoder.
 
-Train reranker
-- Example:
-  - `python scripts/train_reranker.py --train data/processed/hover/reranker_train.jsonl --dev data/processed/hover/reranker_dev.jsonl --model cross-encoder/ms-marco-MiniLM-L-6-v2 --epochs 1 --batch-size 32 --lr 2e-5 --output-dir models/reranker`
-- With Weights & Biases logging:
-  - `python scripts/train_reranker.py --train data/processed/hover/reranker_train.jsonl --dev data/processed/hover/reranker_dev.jsonl --wandb-project my_project`
+Train reranker (Colab)
+- Training has moved to Colab. Use the notebook:
+  - Colab: https://colab.research.google.com/drive/1TL19BQ7eSKKdLtv54qufw-aw6OkmTEv9?usp=chrome_ntp
+- Weights & Biases project for runs/artifacts:
+  - https://wandb.ai/mayad123/reranker?nw=nwusermayad123
+- Typical flow:
+  - Prepare data locally with `scripts/prepare_hover.py` into `data/processed/hover/`.
+  - Upload the processed JSONL files to Colab (or mount Drive) and run training there.
+  - Save/export the trained model. To use locally, place it under `models/reranker/` or pull from W&B artifacts.
