@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: llm-checker-backend
+    env: python
+    region: oregon  # Change to your preferred region (oregon, frankfurt, singapore, etc.)
+    plan: free  # Use 'free' for free tier (spins down after inactivity), or 'starter' for always-on
+    buildCommand: |
+      cd backend &&
+      pip install --upgrade pip &&
+      pip install -r requirements.txt &&
+      python -m spacy download en_core_web_sm
+    startCommand: |
+      cd backend &&
+      uvicorn app:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11
+      # SEARX_URL: Update this if you have a public SearXNG instance deployed
+      # Or leave as default to use localhost (may not work if SearXNG isn't deployed)
+      - key: SEARX_URL
+        value: http://127.0.0.1:8080/search  # Update this URL if you have a SearXNG instance
+      - key: SEARX_TIMEOUT_S
+        value: 15
+
