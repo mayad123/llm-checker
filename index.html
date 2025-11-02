@@ -6,6 +6,7 @@
   <title>LLM Fact Checker</title>
   <meta name="description" content="Paste ChatGPT, Claude, or any LLM response and get instant fact-checking with verified sources">
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="config.js"></script>
   <style>
     @keyframes slide-down {
       from {
@@ -137,9 +138,16 @@
   </div>
 
   <script>
-    // Configuration - Update this with your backend API URL
-    // You can set window.API_URL before the script runs, or edit this line directly
+    // Configuration - API URL is set in config.js
+    // For local development: uses http://localhost:8000/check
+    // For GitHub Pages: MUST be set in config.js to a publicly accessible backend URL
     const API_URL = window.API_URL || 'http://localhost:8000/check';
+    
+    // Show error if trying to use localhost on GitHub Pages
+    if (window.location.hostname.includes('github.io') && API_URL.includes('localhost')) {
+      console.error('⚠️ ERROR: API_URL points to localhost on GitHub Pages!');
+      console.error('Please update config.js with your deployed backend URL.');
+    }
 
     // State
     let state = {
@@ -183,7 +191,16 @@
       }
     }
 
-    // Update UI from state
+      // Check API URL configuration
+    function checkAPIConfiguration() {
+      if (window.location.hostname.includes('github.io') && API_URL.includes('localhost')) {
+        showError('API URL is not configured! Please update config.js with your backend URL. See README for instructions.');
+        return false;
+      }
+      return true;
+    }
+
+      // Update UI from state
     function updateUI() {
       // Update button
       updateButtonState();
@@ -370,6 +387,11 @@
     async function runCheck() {
       if (!state.input.trim()) {
         showError('Please paste an LLM response to check');
+        return;
+      }
+
+      // Check API configuration
+      if (!checkAPIConfiguration()) {
         return;
       }
 
