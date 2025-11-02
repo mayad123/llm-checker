@@ -1,29 +1,23 @@
-// Configuration for API URL
-// For GitHub Pages, update this with your deployed backend URL
-// Examples:
-// - Heroku: 'https://your-app.herokuapp.com/check'
-// - Railway: 'https://your-app.railway.app/check'
-// - AWS/Other: 'https://your-api-domain.com/check'
-
 // ========================================
-// SET A DEFAULT PUBLIC BACKEND URL HERE
+// DEFAULT BACKEND API URL CONFIGURATION
 // ========================================
-// Uncomment and set a public backend URL for all users:
-// window.API_URL = 'https://your-public-backend-url.com/check';
+// Set this to your deployed FastAPI backend URL to enable automatic use
+// Users won't need to configure anything - it will work automatically!
+//
+// To deploy your backend:
+// 1. Deploy backend/app.py to Railway, Render, Heroku, or similar
+// 2. Get your backend URL (e.g., https://your-app.railway.app)
+// 3. Uncomment and set the URL below (must end with /check)
+//
+// Example:
+// window.API_URL = 'https://llm-checker-backend.railway.app/check';
 
-// If you're hosting a public backend for GitHub Pages users, set it above.
-// This will be the default URL for all visitors to the GitHub Pages site.
-// Users can still override it using the settings panel (⚙️ icon).
+// Uncomment this line and set your deployed backend URL:
+// window.API_URL = 'https://your-backend-url.com/check';
+
+// If set, all users will automatically use this backend (no configuration needed!)
+// Users can still override it using the settings panel (⚙️ icon) if they want.
 
 // If not set, defaults to localhost for local development
-// For GitHub Pages visitors, they'll need to configure their own backend URL
-if (typeof window !== 'undefined' && !window.API_URL) {
-  // Check if we're on GitHub Pages (github.io domain)
-  if (window.location.hostname.includes('github.io')) {
-    // No default backend - users must configure their own
-    // Or uncomment the line above to provide a public backend
-    console.info('ℹ️ No default backend configured for GitHub Pages.');
-    console.info('Users can configure their own backend URL using the settings panel (⚙️ icon).');
-  }
-}
+// For GitHub Pages visitors without a default, they'll need to configure their own backend URL
 

@@ -54,12 +54,21 @@ The default `localhost:8000` will NOT work on GitHub Pages. Visitors have three 
    ```
    Then use `http://localhost:8000/check` (only works locally)
 
-**For Site Owners:**
+**For Site Owners - Enable Zero-Config for Users:**
 
-If you want to provide a public backend for all GitHub Pages visitors:
-1. Deploy your backend to a public URL
-2. Edit `config.js` and uncomment: `window.API_URL = 'https://your-backend-url.com/check';`
-3. All visitors will use this backend by default (they can still override it)
+If you want users to use the site **without any configuration**:
+1. Deploy your FastAPI backend (`backend/app.py`) to a free service:
+   - **Railway** (recommended): https://railway.app - Connect GitHub repo, auto-deploys
+   - **Render**: https://render.com - Free tier available
+   - **Heroku**: Requires credit card but has free tier
+2. Get your backend URL (e.g., `https://llm-checker-backend.railway.app`)
+3. Edit `config.js` and uncomment/set:
+   ```javascript
+   window.API_URL = 'https://your-backend-url.com/check';
+   ```
+4. Commit and push - All visitors will automatically use this backend!
+
+**Result:** Users can immediately start using the fact-checker without any setup. They can still override it in settings (⚙️ icon) if needed.
 
 ## Notes
 

@@ -46,7 +46,7 @@
           <button
             id="settings-button"
             class="p-2 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-all"
-            title="Configure API Settings"
+            title="Configure API Settings (Optional)"
             onclick="toggleSettings()"
           >
             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -54,6 +54,11 @@
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
             </svg>
           </button>
+        </div>
+        <div id="default-backend-notice" class="hidden text-center">
+          <p class="text-xs text-slate-500">
+            ✓ Using default backend • <span id="backend-url-display" class="font-mono"></span>
+          </p>
         </div>
         <p class="text-slate-600 text-lg max-w-2xl mx-auto">
           Paste responses from ChatGPT, Claude, or any LLM and get instant fact-checking with verified sources
@@ -298,11 +303,20 @@
 
       // Check API URL configuration
     function checkAPIConfiguration() {
-      if (window.location.hostname.includes('github.io') && API_URL.includes('localhost')) {
-        showError('API URL is not configured! Click the settings icon (⚙️) in the header to configure your backend URL.');
+      // If using localhost on GitHub Pages and no localStorage override, show error
+      if (window.location.hostname.includes('github.io') && API_URL.includes('localhost') && !localStorage.getItem('api_url')) {
+        showError('API URL is not configured! Click the settings icon (⚙️) in the header to configure your backend URL. Or ask the site owner to set a default backend in config.js.');
         return false;
       }
       return true;
+    }
+    
+    // Check if we have a valid default backend (not localhost on GitHub Pages)
+    function hasDefaultBackend() {
+      if (window.location.hostname.includes('github.io')) {
+        return !API_URL.includes('localhost');
+      }
+      return true; // Localhost is fine for local development
     }
 
       // Update UI from state
@@ -655,9 +669,30 @@
       }
     });
 
+    // Show default backend notice if applicable
+    function showDefaultBackendNotice() {
+      const notice = document.getElementById('default-backend-notice');
+      const urlDisplay = document.getElementById('backend-url-display');
+      
+      if (hasDefaultBackend() && !localStorage.getItem('api_url')) {
+        notice.classList.remove('hidden');
+        urlDisplay.textContent = API_URL.replace('/check', '');
+      } else {
+        notice.classList.add('hidden');
+      }
+    }
+
     // Initial UI update
     updateUI();
     updateCurrentAPIDisplay();
+    showDefaultBackendNotice();
+    
+    // Update notice when API URL changes
+    const originalSaveAPIUrl = window.saveAPIUrl;
+    window.saveAPIUrl = function() {
+      originalSaveAPIUrl();
+      showDefaultBackendNotice();
+    };
   </script>
 </body>
 </html>
