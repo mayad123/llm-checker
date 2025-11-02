@@ -39,12 +39,81 @@
     <main class="max-w-5xl mx-auto px-4 py-8 md:py-12">
       <!-- Header -->
       <div class="text-center mb-10 space-y-3">
-        <h1 class="text-4xl md:text-5xl font-bold bg-gradient-to-r from-blue-600 via-purple-600 to-indigo-600 bg-clip-text text-transparent">
-          LLM Fact Checker
-        </h1>
+        <div class="flex items-center justify-center gap-4">
+          <h1 class="text-4xl md:text-5xl font-bold bg-gradient-to-r from-blue-600 via-purple-600 to-indigo-600 bg-clip-text text-transparent">
+            LLM Fact Checker
+          </h1>
+          <button
+            id="settings-button"
+            class="p-2 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-all"
+            title="Configure API Settings"
+            onclick="toggleSettings()"
+          >
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+          </button>
+        </div>
         <p class="text-slate-600 text-lg max-w-2xl mx-auto">
           Paste responses from ChatGPT, Claude, or any LLM and get instant fact-checking with verified sources
         </p>
+      </div>
+
+      <!-- Settings Panel -->
+      <div id="settings-panel" class="hidden bg-white rounded-2xl shadow-xl p-6 md:p-8 mb-8 border border-slate-200">
+        <div class="space-y-4">
+          <div class="flex items-center justify-between mb-4">
+            <h2 class="text-xl font-semibold text-slate-800">API Configuration</h2>
+            <button onclick="toggleSettings()" class="text-slate-500 hover:text-slate-700">
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+          
+          <div class="space-y-3">
+            <label class="block text-sm font-semibold text-slate-700">
+              Backend API URL
+            </label>
+            <p class="text-xs text-slate-500 mb-2">
+              Enter your FastAPI backend URL. The endpoint should end with <code class="bg-slate-100 px-1 rounded">/check</code>
+            </p>
+            <div class="flex gap-2">
+              <input
+                type="text"
+                id="api-url-input"
+                placeholder="https://your-backend.herokuapp.com/check"
+                class="flex-1 p-3 border-2 border-slate-200 rounded-xl focus:border-blue-500 focus:ring-4 focus:ring-blue-100 outline-none transition-all text-slate-700 font-mono text-sm"
+              />
+              <button
+                id="test-api-button"
+                onclick="testAPI()"
+                class="px-4 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition-all disabled:opacity-50"
+              >
+                Test
+              </button>
+              <button
+                onclick="saveAPIUrl()"
+                class="px-4 py-3 bg-green-600 text-white rounded-xl font-semibold hover:bg-green-700 transition-all"
+              >
+                Save
+              </button>
+            </div>
+            <div id="api-status" class="text-sm"></div>
+            <div class="text-xs text-slate-500 space-y-1">
+              <p><strong>Examples:</strong></p>
+              <ul class="list-disc list-inside space-y-1 ml-2">
+                <li>Local: <code class="bg-slate-100 px-1 rounded">http://localhost:8000/check</code></li>
+                <li>Heroku: <code class="bg-slate-100 px-1 rounded">https://your-app.herokuapp.com/check</code></li>
+                <li>Railway: <code class="bg-slate-100 px-1 rounded">https://your-app.railway.app/check</code></li>
+              </ul>
+            </div>
+            <div id="current-api-url" class="text-xs text-slate-600 mt-2 p-2 bg-slate-50 rounded">
+              <strong>Current:</strong> <span id="current-api-display" class="font-mono"></span>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- Input Card -->
@@ -138,16 +207,25 @@
   </div>
 
   <script>
-    // Configuration - API URL is set in config.js
-    // For local development: uses http://localhost:8000/check
-    // For GitHub Pages: MUST be set in config.js to a publicly accessible backend URL
-    const API_URL = window.API_URL || 'http://localhost:8000/check';
-    
-    // Show error if trying to use localhost on GitHub Pages
-    if (window.location.hostname.includes('github.io') && API_URL.includes('localhost')) {
-      console.error('⚠️ ERROR: API_URL points to localhost on GitHub Pages!');
-      console.error('Please update config.js with your deployed backend URL.');
+    // Configuration - API URL is loaded from:
+    // 1. localStorage (user-configured)
+    // 2. config.js (if set)
+    // 3. Default to localhost
+    function getAPIUrl() {
+      // Check localStorage first (user-configured)
+      const saved = localStorage.getItem('api_url');
+      if (saved && saved.trim()) {
+        return saved.trim();
+      }
+      // Check config.js
+      if (window.API_URL && window.API_URL.trim()) {
+        return window.API_URL.trim();
+      }
+      // Default
+      return 'http://localhost:8000/check';
     }
+    
+    let API_URL = getAPIUrl();
 
     // State
     let state = {
@@ -194,7 +272,7 @@
       // Check API URL configuration
     function checkAPIConfiguration() {
       if (window.location.hostname.includes('github.io') && API_URL.includes('localhost')) {
-        showError('API URL is not configured! Please update config.js with your backend URL. See README for instructions.');
+        showError('API URL is not configured! Click the settings icon (⚙️) in the header to configure your backend URL.');
         return false;
       }
       return true;
@@ -383,6 +461,116 @@
     }
     window.toggleClaim = toggleClaim;
 
+    // Settings panel functions
+    function toggleSettings() {
+      const panel = document.getElementById('settings-panel');
+      panel.classList.toggle('hidden');
+      
+      if (!panel.classList.contains('hidden')) {
+        // Load current API URL into input
+        document.getElementById('api-url-input').value = API_URL;
+        updateCurrentAPIDisplay();
+      }
+    }
+    window.toggleSettings = toggleSettings;
+
+    function updateCurrentAPIDisplay() {
+      document.getElementById('current-api-display').textContent = API_URL;
+    }
+
+    async function testAPI() {
+      const input = document.getElementById('api-url-input');
+      const url = input.value.trim();
+      const statusDiv = document.getElementById('api-status');
+      const testButton = document.getElementById('test-api-button');
+      
+      if (!url) {
+        statusDiv.innerHTML = '<span class="text-red-600">Please enter an API URL</span>';
+        return;
+      }
+
+      // Validate URL format
+      if (!url.match(/^https?:\/\/.+/)) {
+        statusDiv.innerHTML = '<span class="text-red-600">Invalid URL format. Must start with http:// or https://</span>';
+        return;
+      }
+
+      testButton.disabled = true;
+      testButton.textContent = 'Testing...';
+      statusDiv.innerHTML = '<span class="text-blue-600">Testing connection...</span>';
+
+      try {
+        // Try a simple OPTIONS or GET request first to test CORS, or POST with minimal payload
+        const testPayload = { llm_output: 'test', debug: false };
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(testPayload),
+          signal: controller.signal
+        });
+
+        clearTimeout(timeoutId);
+
+        if (res.ok || res.status === 400 || res.status === 422) {
+          // 400/422 are OK - means the endpoint exists, just wrong payload
+          statusDiv.innerHTML = '<span class="text-green-600">✓ Connection successful! The API endpoint is reachable.</span>';
+        } else {
+          statusDiv.innerHTML = `<span class="text-amber-600">⚠ Server responded with status ${res.status}. Endpoint exists but may have issues.</span>`;
+        }
+      } catch (err) {
+        if (err.name === 'AbortError') {
+          statusDiv.innerHTML = '<span class="text-red-600">✗ Connection timeout. Check your URL or network.</span>';
+        } else if (err.message.includes('CORS')) {
+          statusDiv.innerHTML = '<span class="text-red-600">✗ CORS error. Your backend needs to allow requests from this domain.</span>';
+        } else {
+          statusDiv.innerHTML = `<span class="text-red-600">✗ Connection failed: ${err.message}</span>`;
+        }
+      } finally {
+        testButton.disabled = false;
+        testButton.textContent = 'Test';
+      }
+    }
+    window.testAPI = testAPI;
+
+    function saveAPIUrl() {
+      const input = document.getElementById('api-url-input');
+      const url = input.value.trim();
+      
+      if (!url) {
+        showError('Please enter an API URL');
+        return;
+      }
+
+      // Validate URL format
+      if (!url.match(/^https?:\/\/.+/)) {
+        showError('Invalid URL format. Must start with http:// or https://');
+        return;
+      }
+
+      // Ensure it ends with /check
+      const cleanUrl = url.endsWith('/check') ? url : (url.endsWith('/') ? url + 'check' : url + '/check');
+
+      // Save to localStorage
+      localStorage.setItem('api_url', cleanUrl);
+      
+      // Update current API URL
+      API_URL = cleanUrl;
+      updateCurrentAPIDisplay();
+      
+      // Show success message
+      const statusDiv = document.getElementById('api-status');
+      statusDiv.innerHTML = '<span class="text-green-600">✓ API URL saved! It will be remembered for future visits.</span>';
+      
+      // Hide settings after a moment
+      setTimeout(() => {
+        toggleSettings();
+      }, 1500);
+    }
+    window.saveAPIUrl = saveAPIUrl;
+
     // Run check
     async function runCheck() {
       if (!state.input.trim()) {
@@ -442,6 +630,7 @@
 
     // Initial UI update
     updateUI();
+    updateCurrentAPIDisplay();
   </script>
 </body>
 </html>

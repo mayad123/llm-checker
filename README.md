@@ -10,25 +10,32 @@ The site is automatically deployed to GitHub Pages via GitHub Actions. The `inde
 
 ### Configuration
 
-**For GitHub Pages (REQUIRED):**
+**User Configuration (Easiest Method):**
 
-You MUST configure the API URL before deploying to GitHub Pages. The default `localhost:8000` will NOT work on GitHub Pages.
+Users can configure the API URL directly in the browser:
+1. Click the ⚙️ settings icon in the header
+2. Enter your backend API URL (e.g., `https://your-backend.herokuapp.com/check`)
+3. Click "Test" to verify the connection
+4. Click "Save" to save it (stored in browser's localStorage)
 
-1. Edit `config.js` in the repository root
-2. Uncomment and set `window.API_URL` to your deployed backend URL:
-   ```javascript
-   window.API_URL = 'https://your-backend-url.com/check';
-   ```
-3. Examples:
-   - Heroku: `'https://your-app.herokuapp.com/check'`
-   - Railway: `'https://your-app.railway.app/check'`
-   - AWS/Other: `'https://your-api-domain.com/check'`
+**What goes in the API URL:**
 
-**For local development:**
+The API URL should point to your FastAPI backend's `/check` endpoint:
+- **Format:** `https://your-backend-url.com/check`
+- **Must end with:** `/check` (the app will auto-add it if missing)
+- **Examples:**
+  - Local: `http://localhost:8000/check`
+  - Heroku: `https://your-app.herokuapp.com/check`
+  - Railway: `https://your-app.railway.app/check`
+  - AWS/Other: `https://your-api-domain.com/check`
 
-The default `http://localhost:8000/check` works automatically when running locally.
+**For GitHub Pages:**
 
-**Important:** You must deploy your FastAPI backend to a publicly accessible URL (Heroku, Railway, AWS, etc.) before using GitHub Pages.
+The default `localhost:8000` will NOT work on GitHub Pages. Users need to:
+1. Deploy the FastAPI backend to a publicly accessible URL
+2. Use the settings panel (⚙️ icon) to configure the backend URL
+
+**Alternative:** You can also pre-configure in `config.js` (see file for instructions)
 
 ## Notes
 
