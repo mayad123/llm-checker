@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LLM Fact Checker</title>
+  <meta name="description" content="Paste ChatGPT, Claude, or any LLM response and get instant fact-checking with verified sources">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @keyframes slide-down {
+      from {
+        opacity: 0;
+        transform: translateY(-10px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+    @keyframes fade-in {
+      from {
+        opacity: 0;
+      }
+      to {
+        opacity: 1;
+      }
+    }
+    .animate-slide-down {
+      animation: slide-down 0.3s ease-out;
+    }
+    .animate-fade-in {
+      animation: fade-in 0.5s ease-out;
+    }
+  </style>
+</head>
+<body>
+  <div class="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
+    <main class="max-w-5xl mx-auto px-4 py-8 md:py-12">
+      <!-- Header -->
+      <div class="text-center mb-10 space-y-3">
+        <h1 class="text-4xl md:text-5xl font-bold bg-gradient-to-r from-blue-600 via-purple-600 to-indigo-600 bg-clip-text text-transparent">
+          LLM Fact Checker
+        </h1>
+        <p class="text-slate-600 text-lg max-w-2xl mx-auto">
+          Paste responses from ChatGPT, Claude, or any LLM and get instant fact-checking with verified sources
+        </p>
+      </div>
+
+      <!-- Input Card -->
+      <div class="bg-white rounded-2xl shadow-xl p-6 md:p-8 mb-8 border border-slate-200 transition-all duration-300 hover:shadow-2xl">
+        <div class="space-y-4">
+          <div class="space-y-2">
+            <label class="block text-sm font-semibold text-slate-700">
+              Paste LLM Response (ChatGPT, Claude, etc.)
+            </label>
+            <p class="text-xs text-slate-500">
+              Copy and paste any response from ChatGPT, Claude, Gemini, or other LLMs to fact-check claims and see verified sources
+            </p>
+          </div>
+          <textarea
+            id="input-textarea"
+            class="w-full min-h-[200px] p-4 border-2 border-slate-200 rounded-xl focus:border-blue-500 focus:ring-4 focus:ring-blue-100 outline-none transition-all duration-200 resize-none text-slate-700 font-medium placeholder:text-slate-400"
+            placeholder="Paste your LLM response here...&#10;&#10;Example: &#10;Ali Ghodsi has been the CEO of Databricks since 2016. The company was founded in 2013 and is known for its data analytics platform."
+          ></textarea>
+          <div class="flex items-center justify-between">
+            <p class="text-xs text-slate-500">
+              Press <kbd class="px-2 py-1 bg-slate-100 rounded text-xs font-mono">Ctrl/Cmd + Enter</kbd> to check
+            </p>
+            <button
+              id="check-button"
+              class="px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-semibold shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 transform hover:scale-105 active:scale-95 flex items-center gap-2"
+            >
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span>Check Facts</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Error Message -->
+      <div id="error-message" class="hidden bg-red-50 border-2 border-red-200 rounded-xl p-4 mb-6 animate-slide-down">
+        <div class="flex items-center gap-2">
+          <svg class="w-5 h-5 text-red-600" fill="currentColor" viewBox="0 0 20 20">
+            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+          </svg>
+          <p class="text-red-700 font-medium" id="error-text"></p>
+        </div>
+      </div>
+
+      <!-- Results Header -->
+      <div id="results-header" class="hidden mb-6 flex items-center justify-between flex-wrap gap-4">
+        <div class="flex items-center gap-3">
+          <div class="h-1 w-12 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-full"></div>
+          <p class="text-sm text-slate-600 font-medium">
+            Checked on <span class="text-slate-900 font-semibold" id="checked-on"></span>
+          </p>
+        </div>
+        <div id="claims-count" class="hidden px-4 py-2 bg-slate-100 rounded-full">
+          <span class="text-sm font-semibold text-slate-700" id="claims-count-text"></span>
+        </div>
+      </div>
+
+      <!-- Claims Results -->
+      <div id="claims-container" class="space-y-4 animate-fade-in"></div>
+
+      <!-- Empty State -->
+      <div id="empty-state" class="hidden text-center py-12 bg-white rounded-xl shadow-lg border border-slate-200">
+        <svg class="w-16 h-16 mx-auto text-slate-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+        </svg>
+        <p class="text-slate-600 font-medium mb-2">No claims found to verify</p>
+        <p class="text-sm text-slate-500">The LLM response may not contain verifiable factual claims.</p>
+      </div>
+
+      <!-- Help Section -->
+      <div id="help-section" class="bg-blue-50 border border-blue-200 rounded-xl p-6 mb-8">
+        <div class="flex items-start gap-3">
+          <svg class="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+            <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
+          </svg>
+          <div class="space-y-2 flex-1">
+            <h3 class="text-sm font-semibold text-blue-900">How to use:</h3>
+            <ol class="text-sm text-blue-800 space-y-1 list-decimal list-inside">
+              <li>Copy a response from ChatGPT, Claude, Gemini, or any other LLM</li>
+              <li>Paste it in the text area above</li>
+              <li>Click "Check Facts" to see verified sources and fact-checking results</li>
+            </ol>
+            <p class="text-xs text-blue-700 mt-3">
+              <strong>Note:</strong> This tool analyzes factual claims in the text and verifies them against online sources. It does not call ChatGPT or any LLM—you provide the response to check.
+            </p>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    // Configuration - Update this with your backend API URL
+    // You can set window.API_URL before the script runs, or edit this line directly
+    const API_URL = window.API_URL || 'http://localhost:8000/check';
+
+    // State
+    let state = {
+      input: '',
+      loading: false,
+      claims: [],
+      checkedOn: '',
+      error: '',
+      expandedClaim: null
+    };
+
+    // DOM Elements
+    const elements = {
+      input: document.getElementById('input-textarea'),
+      checkButton: document.getElementById('check-button'),
+      errorMessage: document.getElementById('error-message'),
+      errorText: document.getElementById('error-text'),
+      resultsHeader: document.getElementById('results-header'),
+      checkedOn: document.getElementById('checked-on'),
+      claimsCount: document.getElementById('claims-count'),
+      claimsCountText: document.getElementById('claims-count-text'),
+      claimsContainer: document.getElementById('claims-container'),
+      emptyState: document.getElementById('empty-state'),
+      helpSection: document.getElementById('help-section')
+    };
+
+    // Update button state
+    function updateButtonState() {
+      const disabled = state.loading || !state.input.trim();
+      elements.checkButton.disabled = disabled;
+    }
+
+    // Show/hide error
+    function showError(message) {
+      state.error = message;
+      if (message) {
+        elements.errorText.textContent = message;
+        elements.errorMessage.classList.remove('hidden');
+      } else {
+        elements.errorMessage.classList.add('hidden');
+      }
+    }
+
+    // Update UI from state
+    function updateUI() {
+      // Update button
+      updateButtonState();
+      
+      // Update button content
+      if (state.loading) {
+        elements.checkButton.innerHTML = `
+          <svg class="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+          <span>Checking...</span>
+        `;
+      } else {
+        elements.checkButton.innerHTML = `
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <span>Check Facts</span>
+        `;
+      }
+
+      // Update results header
+      if (state.checkedOn) {
+        elements.checkedOn.textContent = state.checkedOn;
+        elements.resultsHeader.classList.remove('hidden');
+        
+        if (state.claims.length > 0) {
+          elements.claimsCountText.textContent = `${state.claims.length} ${state.claims.length === 1 ? 'claim' : 'claims'} found`;
+          elements.claimsCount.classList.remove('hidden');
+        } else {
+          elements.claimsCount.classList.add('hidden');
+        }
+      } else {
+        elements.resultsHeader.classList.add('hidden');
+      }
+
+      // Update claims
+      renderClaims();
+
+      // Update empty state
+      if (!state.loading && state.claims.length === 0 && state.checkedOn) {
+        elements.emptyState.classList.remove('hidden');
+      } else {
+        elements.emptyState.classList.add('hidden');
+      }
+
+      // Update help section
+      if (!state.loading && state.claims.length === 0 && !state.checkedOn) {
+        elements.helpSection.classList.remove('hidden');
+      } else {
+        elements.helpSection.classList.add('hidden');
+      }
+    }
+
+    // Render claims
+    function renderClaims() {
+      if (state.claims.length === 0) {
+        elements.claimsContainer.innerHTML = '';
+        return;
+      }
+
+      elements.claimsContainer.innerHTML = state.claims.map((claim, i) => {
+        const isExpanded = state.expandedClaim === i;
+        return `
+          <div class="bg-white rounded-xl shadow-lg border-2 border-slate-100 overflow-hidden transition-all duration-300 hover:shadow-xl hover:border-slate-200">
+            <div class="p-6">
+              <div class="flex items-start justify-between gap-4 mb-4">
+                <div class="flex-1">
+                  <p class="text-slate-800 font-medium leading-relaxed text-lg">
+                    ${escapeHtml(claim.text)}
+                  </p>
+                </div>
+                <div class="flex flex-col items-end gap-2">
+                  <span class="${getChipStyles(claim.verdict)}">
+                    <span class="text-base">${getVerdictIcon(claim.verdict)}</span>
+                    <span class="capitalize">${claim.verdict}</span>
+                  </span>
+                  <div class="flex items-center gap-2">
+                    <span class="text-xs font-semibold ${getConfidenceColor(claim.confidence)}">
+                      ${Math.round(claim.confidence * 100)}% confidence
+                    </span>
+                    <div class="w-16 h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                      <div class="h-full transition-all duration-500 ${getConfidenceBarColor(claim.confidence)}" style="width: ${claim.confidence * 100}%"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              ${claim.citation ? `
+                <div class="mt-4 pt-4 border-t border-slate-200">
+                  <button onclick="toggleClaim(${i})" class="w-full flex items-center justify-between text-left group">
+                    <span class="text-sm font-semibold text-blue-600 group-hover:text-blue-700 transition-colors">
+                      ${isExpanded ? 'Hide Evidence' : 'View Evidence'}
+                    </span>
+                    <svg class="w-5 h-5 text-blue-600 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                  ${isExpanded ? `
+                    <div class="mt-4 p-4 bg-slate-50 rounded-lg border border-slate-200 animate-slide-down">
+                      <div class="space-y-3">
+                        <div>
+                          <p class="text-xs font-semibold text-slate-500 mb-2">EVIDENCE SNIPPET</p>
+                          <p class="text-sm text-slate-700 leading-relaxed italic">
+                            "${escapeHtml(claim.citation.snippet)}"
+                          </p>
+                        </div>
+                        <div>
+                          <p class="text-xs font-semibold text-slate-500 mb-2">SOURCE</p>
+                          <a href="${escapeHtml(claim.citation.url)}" target="_blank" rel="noreferrer" class="text-blue-600 hover:text-blue-700 underline break-all text-sm font-medium flex items-center gap-2 group">
+                            <span>${escapeHtml(claim.citation.url)}</span>
+                            <svg class="w-4 h-4 group-hover:translate-x-0.5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                            </svg>
+                          </a>
+                        </div>
+                      </div>
+                    </div>
+                  ` : ''}
+                </div>
+              ` : ''}
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      // Re-attach event listeners
+      state.claims.forEach((_, i) => {
+        const button = elements.claimsContainer.querySelector(`button[onclick="toggleClaim(${i})"]`);
+        if (button) {
+          button.onclick = () => toggleClaim(i);
+        }
+      });
+    }
+
+    // Helper functions
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    function getChipStyles(verdict) {
+      const base = 'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all duration-200';
+      if (verdict === 'supported') {
+        return `${base} bg-green-50 text-green-700 border border-green-200 shadow-sm`;
+      } else if (verdict === 'contradicted') {
+        return `${base} bg-red-50 text-red-700 border border-red-200 shadow-sm`;
+      } else {
+        return `${base} bg-amber-50 text-amber-700 border border-amber-200 shadow-sm`;
+      }
+    }
+
+    function getVerdictIcon(verdict) {
+      if (verdict === 'supported') return '✓';
+      if (verdict === 'contradicted') return '✗';
+      return '?';
+    }
+
+    function getConfidenceColor(conf) {
+      if (conf >= 0.7) return 'text-green-600';
+      if (conf >= 0.4) return 'text-amber-600';
+      return 'text-red-600';
+    }
+
+    function getConfidenceBarColor(conf) {
+      if (conf >= 0.7) return 'bg-green-500';
+      if (conf >= 0.4) return 'bg-amber-500';
+      return 'bg-red-500';
+    }
+
+    // Toggle claim expansion
+    function toggleClaim(index) {
+      if (state.expandedClaim === index) {
+        state.expandedClaim = null;
+      } else {
+        state.expandedClaim = index;
+      }
+      renderClaims();
+    }
+    window.toggleClaim = toggleClaim;
+
+    // Run check
+    async function runCheck() {
+      if (!state.input.trim()) {
+        showError('Please paste an LLM response to check');
+        return;
+      }
+
+      state.loading = true;
+      state.error = '';
+      state.claims = [];
+      state.checkedOn = '';
+      updateUI();
+
+      try {
+        const res = await fetch(API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ llm_output: state.input, debug: true }),
+        });
+
+        if (!res.ok) {
+          throw new Error(`Failed to check: ${res.statusText}`);
+        }
+
+        const data = await res.json();
+        state.checkedOn = data.checked_on;
+        state.claims = data.claims || [];
+      } catch (err) {
+        showError(err instanceof Error ? err.message : 'An error occurred');
+        state.checkedOn = '';
+        state.claims = [];
+      } finally {
+        state.loading = false;
+        updateUI();
+      }
+    }
+
+    // Event listeners
+    elements.input.addEventListener('input', (e) => {
+      state.input = e.target.value;
+      updateButtonState();
+    });
+
+    elements.checkButton.addEventListener('click', runCheck);
+
+    elements.input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        runCheck();
+      }
+    });
+
+    // Initial UI update
+    updateUI();
+  </script>
+</body>
+</html>
+

@@ -1,8 +1,10 @@
-# LLM Fact Checker - Web Interface
+# LLM Fact Checker - Next.js Development
 
-A modern, interactive web interface for fact-checking LLM outputs.
+> **Note:** The production version has been converted to a standalone HTML file (`index.html`) for GitHub Pages deployment. This Next.js version is for local development only.
 
 ## Local Development
+
+If you want to use the Next.js version locally:
 
 ```bash
 cd web
@@ -38,4 +40,3 @@ web/
 ├── package.json       # Dependencies
 └── next.config.js     # Next.js configuration
 ```
-
