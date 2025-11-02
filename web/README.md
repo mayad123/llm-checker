@@ -22,10 +22,6 @@ npm run export
 
 The static files will be in the `out` directory.
 
-## Deployment
-
-See [../docs/DEPLOYMENT.md](../docs/DEPLOYMENT.md) for GitHub Pages deployment instructions.
-
 ## Environment Variables
 
 - `NEXT_PUBLIC_API_URL`: The backend API URL (defaults to `/api/check` for local development)
