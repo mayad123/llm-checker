@@ -29,13 +29,37 @@ The API URL should point to your FastAPI backend's `/check` endpoint:
   - Railway: `https://your-app.railway.app/check`
   - AWS/Other: `https://your-api-domain.com/check`
 
-**For GitHub Pages:**
+**For GitHub Pages Visitors:**
 
-The default `localhost:8000` will NOT work on GitHub Pages. Users need to:
-1. Deploy the FastAPI backend to a publicly accessible URL
-2. Use the settings panel (⚙️ icon) to configure the backend URL
+The default `localhost:8000` will NOT work on GitHub Pages. Visitors have three options:
 
-**Alternative:** You can also pre-configure in `config.js` (see file for instructions)
+1. **Use a Public Backend (if provided)**
+   - Check if the site owner has set a default backend in `config.js`
+   - Or ask the site owner for a public API URL
+
+2. **Deploy Your Own Backend**
+   - Clone this repository
+   - Deploy the FastAPI backend (`backend/app.py`) to a free service:
+     - **Railway** (recommended): Connect GitHub repo, auto-deploys
+     - **Render**: Connect GitHub repo, free tier available
+     - **Heroku**: Requires credit card but has free tier
+   - You'll get a URL like `https://your-app.railway.app/check`
+   - Use the settings panel (⚙️ icon) to configure it
+
+3. **Run Backend Locally** (for testing)
+   ```bash
+   cd backend
+   pip install -r requirements.txt
+   python -m uvicorn app:app --host 0.0.0.0 --port 8000
+   ```
+   Then use `http://localhost:8000/check` (only works locally)
+
+**For Site Owners:**
+
+If you want to provide a public backend for all GitHub Pages visitors:
+1. Deploy your backend to a public URL
+2. Edit `config.js` and uncomment: `window.API_URL = 'https://your-backend-url.com/check';`
+3. All visitors will use this backend by default (they can still override it)
 
 ## Notes
 
